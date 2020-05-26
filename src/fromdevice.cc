@@ -50,6 +50,7 @@
 # include <net/if.h>
 # include <features.h>
 # include <linux/if_packet.h>
+#include <linux/sockios.h>
 # include <net/ethernet.h>
 #endif
 
