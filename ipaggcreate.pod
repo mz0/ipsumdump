@@ -1,0 +1,431 @@
+=head1 NAME
+
+ipaggcreate - produce aggregate statistics of network traffic or trace
+
+=head1 SYNOPSIS
+
+ipaggcreate [B<-r> | B<-i> | B<--netflow-summary>] [B<--src>, B<--dst>, B<--sport>, B<--dport>, ...] [other options] [I<files> or I<interfaces>]
+
+=head1 DESCRIPTION
+
+The B<ipaggcreate> program reads IP packets from one or more data sources,
+maps each packet to a label (such as "source address 192.4.10.9" or "length
+10"), and outputs a simply-formatted "aggregate" file reporting the number
+of packets or bytes observed per label.  The resulting file is easy to
+process with text-based tools.  (But see the B<--binary> option, which
+generates a compressed, quick-to-process binary file.)
+
+Here are a couple lines of B<ipaggcreate> output, from `ipaggcreate -s
+/home/kohler/largedump.gz':
+
+  !IPAggregate 1.0
+  !creator "src/ipaggcreate -s /home/kohler/largedump.gz"
+  !counts packets
+  !times 976937726.638704 977337361.804592 399635.165888
+  !num_nonzero 1437
+  !ip
+  4.2.49.2 1
+  4.2.49.4 1
+  4.17.143.9 1
+  4.21.203.29 104
+
+The `B<-s>' option, which is equivalent to `B<--src>', tells B<ipaggcreate>
+to categorize each packet by its I<s>ource IP address.
+`F</home/kohler/largedump.gz>' is a compressed tcpdump(1) file.  Each data
+line represents a label; the first field is the label number (here, an IP
+source address), and the second field the number of packets that had that
+label.  Labels with 0 counts are not reported.
+
+=head1 OPTIONS
+
+=head2 Data Sources
+
+Data source options tell B<ipaggcreate> what kind of data source to use:
+L<tcpdump(1)> raw-packet files (B<--tcpdump>), live network interfaces
+(B<--interface>), NetFlow summary files (B<--netflow-summary>),
+B<ipsumdump> output files (B<--ipsumdump>), DAG or NLANR-formatted files
+(B<--dag>, B<--nlanr>), or others.
+
+Non-option arguments specify the files, or interfaces, to read. For
+example, `ipaggcreate B<-r> eth0 eth1' will read two tcpdump(1) files,
+named "eth0" and "eth1"; `ipaggcreate B<-i> eth0 eth1' will read from two
+live network interfaces, "eth0" and "eth1".
+
+Options that read files read from the standard input when you supply a
+single dash C<-> as a filename, or when you give no filenames at all.
+
+=over 4
+
+=item B<--tcpdump>, B<-r>
+
+Read from one or more files produced by L<tcpdump(1)>'s B<-w> option (also
+known as "pcap files"). Stop when all the files are exhausted. This is the
+default. Files (except for standard input) may be compressed by gzip(1) or
+bzip2(1); B<ipsumdump> will uncompress them on the fly.
+
+=item B<--interface>, B<-i>
+
+Read from live network interfaces. When run this way, B<ipsumdump> will
+continue until interrupted with SIGINT or SIGHUP. When stopped,
+B<ipsumdump> appends a comment to its output file, indicating how many
+packets were dropped by the kernel before output.
+
+=item B<--ipsumdump>
+
+Read from one or more B<ipsumdump> files. Any packet characteristics not
+specified by the input files are set to 0.
+
+=item B<--format>=I<format>
+
+Read from one or more B<ipsumdump> files, using the specified default
+format.  The I<format> should be a space-separated list of content types;
+see L<ToIPSummaryDump(n)> for a list.
+
+=item B<--dag>[=I<encap>]
+
+Read from one or more DAG-formatted trace files.  For new-style ERF dumps,
+which contain encapsulation type information, just say B<--dag>.  For
+old-style dumps, you must supply the right I<encap> argument: C<ATM> for
+ATM RFC-1483 encapsulation (the most common), C<ETHER> for Ethernet, C<PPP>
+for PPP, C<IP> for raw IP, C<HDLC> for Cisco HDLC, C<PPP_HDLC> for PPP
+HDLC, or C<SUNATM> for Sun ATM.  See L<http://dag.cs.waikato.ac.nz/>.
+
+=item B<--nlanr>
+
+Read from one or more NLANR-formatted trace files (fr, fr+, or tsh
+format).  See L<http://pma.nlanr.net/Traces/>.
+
+=item B<--ip-addresses>
+
+Read files containing IP addresses, one address per line.  The label
+must be either --src or --dst.
+
+=item B<--tu-summary>
+
+Read TCP/UDP summary files.  Each line represents one packet, and carries
+the following information: timestamp, source address, source port,
+destination address, destination port, protocol, payload length.  For
+example:
+
+  976937735.345744 18.26.4.9 22 64.55.139.202 26876 T 0
+  976937770.197008 128.10.5.110 63749 64.55.139.202 113 T 5
+
+=item B<--bro-conn-summary>
+
+Read Bro connection summary files.  Each line represents one connection
+attempt, and carries the following information: timestamp, source address,
+destination address, direction (inbound/outbound).
+
+=item B<--netflow-summary>
+
+Read from one or more NetFlow summary files. These are line-oriented ASCII
+files; blank lines, and lines starting with '!' or '#', are ignored. Other
+lines should contain 15 or more fields separated by vertical bars '|'.
+B<Ipsumdump> pays attention to some of these fields:
+
+  Field  Meaning                       Example
+  -----  ----------------------------  ----------
+  0      Source IP address             192.4.1.32
+  1      Destination IP address        18.26.4.44
+  5      Packet count in flow          5
+  6      Byte count in flow            10932
+  7      Flow timestamp (UNIX-style)   998006995
+  8      Flow end timestamp            998006999
+  9      Source port                   3917
+  10     Destination port              80
+  12     TCP flags (OR of all pkts)    18
+  13     IP protocol                   6
+  14     IP TOS bits                   0
+
+=item B<--tcpdump-text>
+
+Read from one or more files containing L<tcpdump(1)> textual output.  It's
+much better to use the binary files produced by 'tcpdump B<-w>', but if
+someone threw those away and all you have is the ASCII output, you can
+still make do.  Only works with tcpdump versions 3.7 and earlier.
+
+=back
+
+=head2 Label
+
+These options determine how packets are labeled; you can supply at most
+one.
+
+=over 4
+
+=item B<--src>, B<-s>
+
+Label by IP source address; all packets with the same source address
+form an aggregate.
+
+=item B<--dst>, B<-d>
+
+Label by IP destination address.  This is the default.
+
+=item B<--length>, B<-l>
+
+Label by IP length.
+
+=item B<--ip> I<field>
+
+Label by the named IP field.  Examples include C<ip src> (equivalent to
+B<--src>), C<ip ttl>, C<ip off>, C<udp sport>, and so forth.  See
+L<AggregateIP(1)> for a full list.
+
+=item B<--flows>
+
+Label by TCP or UDP flow, or, essentially, by end-to-end
+transport-level connection.  Two packets have the same label if
+and only if they are part of the same TCP or UDP connection.  Each flow is
+assigned its own label.  The label number is not meaningful;
+non-TCP/UDP packets are ignored.
+
+=item B<--unidirectional-flows>
+
+Label by unidirectional TCP or UDP flow.  Like B<--flows>, but packets
+from a single connection but heading in different directions are assigned
+different labels.
+
+=item B<--address-pairs>
+
+Label by address pair.  Two packets have the same label if
+and only if they involve the same pair of IP addresses.  The label
+number is not meaningful.
+
+=item B<--unidirectional-address-pairs>
+
+Label by unidirectional address pair.  Two packets have the same
+label if and only if their source addresses match and their destination
+address match.
+
+=back
+
+=head2 Measurement Options
+
+These options specify whether B<ipaggcreate> should count packets or bytes.
+
+=over 4
+
+=item B<--packets>
+
+Count packets: the output file will report the number of packets per label.
+This is the default.
+
+=item B<--bytes>, B<-B>
+
+Count bytes: the output file will report the number of bytes per label.
+This number includes IP and transport headers, but not any link headers.
+
+=back
+
+=head2 Limit and Split Options
+
+These options select portions of the trace file, and allow the user to
+split trace data into multiple aggregate files.
+
+=over 4
+
+=item B<--time-offset>=I<time>, B<-T> I<time>
+
+Ignore the first I<time> worth of packets in the input trace.  If the first
+packet has timestamp T, then all packets (including the first) with
+timestamp less than T+I<time> are ignored.  The I<time> argument can be an
+absolute number of seconds (C<938.42>), or use suffixes such as C<100s>,
+C<12ms>, C<1.5min>, C<2hr>, and so forth.
+
+=item B<--start-time>=I<time>
+
+Ignore packets with timestamps less than I<time>.
+
+=item B<--interval>=I<time>, B<-t> I<time>
+
+Stop after recording aggregate information for I<time> worth of packets.
+That is, if the first recorded packet has timestamp T, then B<ipaggcreate>
+will exit just before the first packet with timestamp T+I<time>, or the end
+of the trace, whichever comes first.
+
+=item B<--limit-labels>=B<count>
+
+Stop after recording information for B<count> distinct labels.  That is,
+exit just before encountering a packet with the B<count>+1 different
+label, or at the end of the trace, whichever comes first.
+
+=back
+
+The four B<--split> options generate multiple aggregate output files based
+on characteristics of the input.  To use B<--split>, you must supply an
+explicit B<--output> filename containing a "C<%d>"-style template; a file
+number is plugged in to that template.  For example, the template
+C<file%03d.txt> will generate files C<file001.txt>, C<file002.txt>, and so
+forth.
+
+=over 4
+
+=item B<--split-time>=B<time>
+
+Start a new output file every B<time> period.  That is, each file will
+contain data for at most B<time> worth of packets.
+
+=item B<--split-labels>=B<count>
+
+Start a new output file every B<count> distinct labels.  That is, each file
+will contain at most B<count> different labels.
+
+=item B<--split-packets>=B<count>
+
+Start a new output file every B<count> packets.
+
+=item B<--split-bytes>=B<count>
+
+Start a new output file every B<count> bytes.
+
+=back
+
+=head2 Other Options
+
+=over 4
+
+=item B<--output>=I<file>, B<-o> I<file>
+
+Write the summary dump to I<file> instead of to the standard output.
+
+=item B<--binary>, B<-b>
+
+Write the summary dump in binary format. See below for more information.
+
+=item B<--write-tcpdump>=I<file>, B<-w> I<file>
+
+Write processed packets to a tcpdump(1) I<file> -- or to the standard
+output, if I<file> is a single dash C<-> -- in addition to the usual
+summary output.
+
+=item B<--filter>=I<filter>, B<-f> I<filter>
+
+Only include packets and flows matching a tcpdump(1) filter. For example,
+`ipsumdump B<-f> "tcp && src net 18/8"' will summarize data only for TCP
+packets from net 18. (The syntax for I<filter> is currently a subset of
+tcpdump's syntax.)
+
+=item B<--anonymize>, B<-A>
+
+Anonymize IP addresses in the output. The anonymization preserves prefix
+and class. This means, first, that two anonymized addresses will share the
+same prefix when their non-anonymized counterparts share the same prefix;
+and second, that anonymized addresses will be in the same class (A, B, C,
+or D) as their non-anonymized counterparts. The anonymization algorithm
+comes from tcpdpriv(1); it works like `tcpdpriv B<-A50 -C4>'.
+
+If B<--anonymize> and B<--write-tcpdump> are both on, the B<tcpdump> output
+file will have anonymized IP addresses. However, the file will contain
+actual packet data, unlike B<tcpdpriv> output.
+
+=item B<--no-promiscuous>
+
+Do not place interfaces into promiscuous mode. Promiscuous mode is the
+default.
+
+=item B<--sample>=I<p>
+
+Sample packets with probability I<p>. That is, I<p> is the chance that a
+packet will cause output to be generated. The actual probability may differ
+from the specified probability, due to fixed point arithmetic; check the
+output for a `C<!sampling_prob>' comment to see the real probability.
+Strictly speaking, this option samples records, not packets, so for NetFlow
+summaries without B<--multipacket>, it will sample flows.
+
+=item B<--multipacket>
+
+Supply this option if you are reading NetFlow or IP summaries -- files
+where each record might represent multiple packets -- and you would like
+the output summary to have one line per packet, instead of the default one
+line per record. See also B<--packet-count>, above.
+
+=item B<--collate>
+
+Sort output packets by increasing timestamp. Use this option when reading
+from multiple tcpdump(1) files to ensure that the output has sorted
+timestamps. Combine B<--collate> with B<--write-tcpdump> to collate
+overlapping tcpdump(1) files into a single, sorted tcpdump(1) file.
+
+=item B<--random-seed>=I<seed>
+
+Set the random seed deterministically to I<seed>, an unsigned integer. By
+default, the random seed is initialized to a random value using
+F</dev/random>, if it exists, combined with other data. The random seed
+indirectly determines which packets are sampled, and the values of
+anonymized IP addresses.
+
+=item B<--quiet>, B<-q>
+
+Do not print a progress bar to standard error. This is the default when
+B<ipsumdump> isn't running interactively.
+
+=item B<--config>
+
+Do not produce a summary. Instead, write the Click configuration that
+B<ipsumdump> would run to the standard output.
+
+=item B<--verbose>, B<-V>
+
+Produce more verbose error messages.
+
+=item B<--help>, B<-h>
+
+Print a help message to the standard output, then exit.
+
+=item B<--version>, B<-v>
+
+Print version number and license information to the standard output, then
+exit.
+
+=back
+
+=head1 SIGNALS
+
+When killed with SIGTERM or SIGINT, B<ipaggcreate> will exit cleanly (and
+generate an output file).  If you want it to flush its buffers without
+exiting, kill it with SIGHUP.
+
+=head1 BINARY FORMAT
+
+Binary ipaggcreate files begin with several ASCII lines, just like regular
+ipaggcreate files.  A line `C<!packed_be>' or `C<!packed_le>' indicates
+that the rest of the file, starting immediately after the newline, consists
+of binary records (in big-endian or little-endian order, respectively).
+Each record is 8 bytes long, and looks like this:
+
+   +---------------+---------------+
+   |     label     |     count     |
+   +---------------+---------------+
+    <---4 bytes---> <---4 bytes--->
+
+The initial word of data contains the label number, the second the count.
+
+=head1 CLICK
+
+The B<ipaggcreate> program uses the Click modular router, an extensible
+system for processing packets.  Click routers consist of C++ components
+called elements.  While some elements run only in a Linux kernel, most can
+run either in the kernel or in user space, and there are user-level
+elements for reading packets from libpcap or from tcpdump files.
+
+B<Ipaggcreate> creates and runs a user-level Click configuration.  However,
+you don't need to install Click to run B<ipsumdump>; the F<libclick>
+directory contains all the relevant parts of Click, bundled into a library.
+
+If you're curious, try running `ipaggcreate B<--config>' with some other
+options to see the Click configuration B<ipsumdump> would run.
+
+This is, I think, a pleasant way to write a packet processor!
+
+=head1 SEE ALSO
+
+tcpdump(1), tcpdpriv(1), click(1), ipsumdump(1)
+
+See http://www.pdos.csail.mit.edu/click/ for more on Click.
+
+=head1 AUTHOR
+
+Eddie Kohler <kohler@cs.ucla.edu>, based on the Click modular router.
+
+Anonymization algorithm from tcpdpriv(1) by Greg Minshall.
