@@ -1,0 +1,11 @@
+/config.h
+/config.log
+/config.status
+/stamp-h
+*.o
+/src/.deps/
+/src/ipaggcreate
+/src/ipaggmanip
+/src/ipsumdump
+/src/ac_elements.c*
+/src/sd_elements.c*

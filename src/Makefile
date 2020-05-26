@@ -1,0 +1,160 @@
+SHELL = /bin/bash
+
+
+
+top_srcdir = ..
+srcdir = .
+top_builddir = ..
+subdir = src
+conf_auxdir = $(top_srcdir)/libclick-2.1
+
+prefix = /home/mz0/.local
+exec_prefix = ${prefix}
+bindir = ${exec_prefix}/bin
+sbindir = ${exec_prefix}/sbin
+libdir = ${exec_prefix}/lib
+linuxdir = @linuxdir@
+datarootdir = ${prefix}/share
+mandir = ${datarootdir}/man
+datadir = ${datarootdir}/click
+
+CLICK_BUILDTOOL = $(top_builddir)/libclick-2.1/click-buildtool
+
+VPATH = .:$(top_srcdir)/$(subdir):$(top_srcdir)
+
+CC = gcc
+CPP = gcc -E
+CXX = g++
+CXXCPP = g++ -E
+LD = /usr/bin/ld
+STRIP = /usr/bin/strip
+AR = /usr/bin/ar
+RANLIB = /usr/bin/ranlib
+INSTALL = /usr/bin/install -c
+INSTALL_DATA = /usr/bin/install -c -m 644
+mkinstalldirs = $(conf_auxdir)/mkinstalldirs
+
+DEPDIR = .deps
+DEPSTAMP = $(DEPDIR)/stamp
+
+.SUFFIXES:
+.SUFFIXES: .c .cc .o .ii
+
+.c.o:
+	$(COMPILE) -c $< -o $@
+.cc.o:
+	$(CXXCOMPILE) -c $< -o $@
+.cc.ii:
+	$(CXXCOMPILE) -E $< > $@
+
+
+IPSUMDUMP_ELEMENT_OBJS = \
+	fromdagdump.o fromdevice.o fromdump.o fromipsumdump.o \
+	fromnetflowsumdump.o fromnlanrdump.o fromtcpdump.o kernelfilter.o \
+	ipsumdumpinfo.o ipsumdump_anno.o ipsumdump_icmp.o ipsumdump_ip.o \
+	ipsumdump_link.o ipsumdump_payload.o ipsumdump_tcp.o ipsumdump_udp.o \
+	toipsumdump.o todump.o \
+	anonipaddr.o changeuid.o classification.o classifier.o counter.o \
+	drivermanager.o discard.o fakepcap.o ipfilter.o ipnameinfo.o \
+	netmapinfo.o progressbar.o randomsample.o script.o switch.o tee.o \
+	timefilter.o timesortedsched.o truncateippayload.o unqueue.o
+
+IPSUMDUMP_OBJS = \
+	$(IPSUMDUMP_ELEMENT_OBJS) ipsumdump.o sd_elements.o
+
+IPAGGCREATE_ELEMENT_OBJS = \
+	fromdagdump.o fromdevice.o fromdump.o fromipsumdump.o \
+	fromnetflowsumdump.o fromnlanrdump.o fromtcpdump.o kernelfilter.o \
+	ipsumdumpinfo.o ipsumdump_anno.o ipsumdump_icmp.o ipsumdump_ip.o \
+	ipsumdump_link.o ipsumdump_payload.o ipsumdump_tcp.o ipsumdump_udp.o \
+	aggcounter.o aggregateip.o aggregateipaddrpair.o aggregateipflows.o \
+	aggregatelen.o aggregatenotifier.o aggregatepaint.o \
+	anonipaddr.o changeuid.o classification.o classifier.o counter.o \
+	drivermanager.o discard.o fakepcap.o ipfieldinfo.o ipfilter.o \
+	ipmirror.o ipnameinfo.o progressbar.o randomsample.o script.o tee.o \
+	timefilter.o timerange.o todump.o
+
+IPAGGCREATE_OBJS = \
+	$(IPAGGCREATE_ELEMENT_OBJS) ipaggcreate.o ac_elements.o
+
+IPAGGMANIP_OBJS = aggtree.o aggwtree.o ipaggmanip.o
+
+
+CPPFLAGS =  -g -DCLICK_USERLEVEL
+CFLAGS = -g -O2 -W -Wall
+CXXFLAGS = -g -O2 -W -Wall
+DEPCFLAGS = -MD -MP -MF $(DEPDIR)/$*.d
+LDFLAGS = 
+LIBS =  $(top_builddir)/libclick-2.1/libsrc/libclick.a `$(CLICK_BUILDTOOL) --otherlibs`
+DEFS = -DHAVE_CONFIG_H `$(CLICK_BUILDTOOL) --cflags`
+INCLUDES = -I$(top_builddir) -I$(srcdir) -I$(top_builddir)/libclick-2.1/include -I$(top_srcdir)/libclick-2.1/include
+
+CXXCOMPILE = $(CXX) $(INCLUDES) $(DEFS) $(CPPFLAGS) $(CXXFLAGS) $(DEPCFLAGS)
+CXXLD = $(CXX)
+CXXLINK = $(CXXLD) $(CXXFLAGS) $(LDFLAGS) -o $@
+COMPILE = $(CC) $(DEFS) $(INCLUDES) $(CPPFLAGS) $(CFLAGS) $(DEPCFLAGS)
+
+all: ipsumdump ipaggcreate ipaggmanip
+all-local: ipsumdump ipaggcreate ipaggmanip
+
+ipsumdump: $(IPSUMDUMP_OBJS) $(top_builddir)/libclick-2.1/libsrc/libclick.a
+	$(CXXLINK) -rdynamic $(IPSUMDUMP_OBJS) $(LIBS)
+
+ipaggcreate: $(IPAGGCREATE_OBJS) $(top_builddir)/libclick-2.1/libsrc/libclick.a
+	$(CXXLINK) -rdynamic $(IPAGGCREATE_OBJS) $(LIBS)
+
+ipaggmanip: $(IPAGGMANIP_OBJS) $(top_builddir)/libclick-2.1/libsrc/libclick.a
+	$(CXXLINK) -rdynamic $(IPAGGMANIP_OBJS) $(LIBS)
+
+Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
+	cd $(top_builddir) && $(SHELL) ./config.status src/Makefile
+
+elemlist: always
+	@rm -f sd_elements.conf ac_elements.conf
+	@$(MAKE) sd_elements.conf ac_elements.conf
+sd_elements.conf: $(CLICK_BUILDTOOL)
+	(for i in $(IPSUMDUMP_ELEMENT_OBJS); do echo "$(srcdir)/$$i" | sed 's/\.o/\.cc/'; done) | $(CLICK_BUILDTOOL) findelem -r userlevel -S > sd_elements.conf
+sd_elements.cc: sd_elements.conf $(CLICK_BUILDTOOL)
+	$(CLICK_BUILDTOOL) elem2export -S < sd_elements.conf > sd_elements.cc
+	@rm -f $(DEPDIR)/sd_elements.d
+ac_elements.conf: $(CLICK_BUILDTOOL)
+	(for i in $(IPAGGCREATE_ELEMENT_OBJS); do echo "$(srcdir)/$$i" | sed 's/\.o/\.cc/'; done) | $(CLICK_BUILDTOOL) findelem -r userlevel -S > ac_elements.conf
+ac_elements.cc: ac_elements.conf $(CLICK_BUILDTOOL)
+	$(CLICK_BUILDTOOL) elem2export -S < ac_elements.conf > ac_elements.cc
+	@rm -f $(DEPDIR)/ac_elements.d
+
+#!gmake
+DEPFILES := $(wildcard $(DEPDIR)/*.d)
+ifneq ($(DEPFILES),)
+include $(DEPFILES)
+endif
+#!end gmake
+
+$(IPSUMDUMP_OBJS) $(IPAGGCREATE_OBJS) $(IPAGGMANIP_OBJS): $(DEPSTAMP)
+$(DEPSTAMP):
+	@-mkdir $(DEPDIR) >/dev/null 2>&1
+	@touch $@
+
+install: ipsumdump ipaggcreate ipaggmanip
+	$(mkinstalldirs) $(DESTDIR)$(bindir)
+	$(INSTALL) ipsumdump $(DESTDIR)$(bindir)/ipsumdump
+	$(INSTALL) ipaggcreate $(DESTDIR)$(bindir)/ipaggcreate
+	$(INSTALL) ipaggmanip $(DESTDIR)$(bindir)/ipaggmanip
+uninstall:
+	-rm -f $(DESTDIR)$(bindir)/ipsumdump
+	-rm -f $(DESTDIR)$(bindir)/ipaggcreate
+	-rm -f $(DESTDIR)$(bindir)/ipaggmanip
+
+clean:
+	-rm -rf $(DEPDIR)
+	-rm -f *.o sd_elements.mk sd_elements.cc sd_elements.conf \
+	ac_elements.mk ac_elements.cc ac_elements.conf \
+	ipsumdump ipaggcreate ipaggmanip
+distclean: clean
+	-rm -f Makefile
+
+always:
+	@:
+
+.PHONY: all all-local always clean distclean elemlist \
+	install uninstall
